@@ -1,0 +1,28 @@
+{
+    "files.associations": {
+        "endian.h": "c",
+        "__locale": "c",
+        "atomic": "c",
+        "bit": "c",
+        "codecvt": "c",
+        "compare": "c",
+        "cstddef": "c",
+        "filesystem": "c",
+        "ios": "c",
+        "limits": "c",
+        "locale": "c",
+        "new": "c",
+        "string": "c",
+        "type_traits": "c",
+        "variant": "c",
+        "charconv": "c",
+        "chrono": "c",
+        "condition_variable": "c",
+        "list": "c",
+        "optional": "c",
+        "format": "c",
+        "memory": "c",
+        "mutex": "c",
+        "functional": "c"
+    }
+}
