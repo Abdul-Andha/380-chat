@@ -43,6 +43,35 @@ static void error(const char *msg)
 	exit(EXIT_FAILURE);
 }
 
+// Client receives and verifies the server's public key
+int receiveAndVerifyServerKey(int sockfd) {
+    char serverPubKey[1024]; 
+    recv(sockfd, serverPubKey, sizeof(serverPubKey), 0); 
+
+    dhKey expectedServerKey;
+    int result = readDH("keyFile.pub", &expectedServerKey);
+	if (result != 0) {
+    	if (result == -1) {
+        	fprintf(stderr, "Failed to open server's public key file\n");
+    	} else if (result == -2) {
+        	fprintf(stderr, "Failed to parse server's public key file\n");
+    	}
+    	return -1;
+	}
+
+
+    char *expectedPubKeyStr = mpz_get_str(NULL, 10, expectedServerKey.PK);
+
+    if (strcmp(serverPubKey, expectedPubKeyStr) != 0) {
+        fprintf(stderr, "Server's public key does not match the expected key\n");
+        free(expectedPubKeyStr);
+        return -1;
+    }
+
+    free(expectedPubKeyStr);
+    return 0;
+}
+
 int initServerNet(int port)
 {
 	int reuse = 1;
@@ -66,8 +95,15 @@ int initServerNet(int port)
 	if (sockfd < 0)
 		error("error on accept");
 	close(listensock);
+
+	dhKey serverKey;
+	initKey(&serverKey);
+	char *filename = "keyFile";
+	if (writeDH(filename, &serverKey) != 0) {
+		error("failed to write key to file");
+	}
+
 	fprintf(stderr, "connection made, starting session...\n");
-	/* at this point, should be able to send/recv on sockfd */
 	return 0;
 }
 
@@ -90,6 +126,13 @@ static int initClientNet(char *hostname, int port)
 	serv_addr.sin_port = htons(port);
 	if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
 		error("ERROR connecting");
+
+	dhKey clientKey;
+    initKey(&clientKey);
+
+	if(receiveAndVerifyServerKey(sockfd)!=0){
+		error("Was not able to verify server key");
+	}
 	/* at this point, should be able to send/recv on sockfd */
 	return 0;
 }
