@@ -94,6 +94,25 @@ static int initClientNet(char *hostname, int port)
 	return 0;
 }
 
+// NOT SKELETON CODE
+int generateLongTermKey(char *fname) {
+	dhKey key;
+	if (readDH(fname, &key) == -1) {
+		initKey(&key);
+		dhGenk(&key);
+		char *filename = fname;
+		if (writeDH(filename, &key) != 0) {
+			printf("failed to write key to file %s\n", filename);
+			return -1;
+		} else {
+			fprintf(stderr, "wrote key to file %s\n", filename);
+			return 0;
+		}
+	}
+	return 0;
+}
+//
+
 static int shutdownNetwork()
 {
 	shutdown(sockfd, 2);
@@ -153,6 +172,7 @@ static void tsappend(char *message, char **tagnames, int ensurenewline)
 
 static void sendMessage(GtkWidget *w /* <-- msg entry widget */, gpointer /* data */)
 {
+	printf("send message\n");
 	char *tags[2] = {"self", NULL};
 	tsappend("me: ", tags, 0);
 	GtkTextIter mstart; /* start of message pointer */
@@ -235,10 +255,14 @@ int main(int argc, char *argv[])
 	if (isclient)
 	{
 		initClientNet(hostname, port);
+		generateLongTermKey("clientKey");
+		
+
 	}
 	else
 	{
 		initServerNet(port);
+		generateLongTermKey("serverKey");
 	}
 
 	/* setup GTK... */
