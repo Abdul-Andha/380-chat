@@ -278,39 +278,24 @@ static void tsappend(char *message, char **tagnames, int ensurenewline)
 
 static void sendMessage(GtkWidget *w /* <-- msg entry widget */, gpointer /* data */)
 {
-	printf("send message\n");
-	char *tags[2] = {"self", NULL};
-	tsappend("me: ", tags, 0);
+	char* tags[2] = {"self",NULL};
+	tsappend("me: ",tags,0);
 	GtkTextIter mstart; /* start of message pointer */
-	GtkTextIter mend;	/* end of message pointer */
-	gtk_text_buffer_get_start_iter(mbuf, &mstart);
-	gtk_text_buffer_get_end_iter(mbuf, &mend);
-	char *message = gtk_text_buffer_get_text(mbuf, &mstart, &mend, 1);
-	size_t len = g_utf8_strlen(message, -1);
+	GtkTextIter mend;   /* end of message pointer */
+	gtk_text_buffer_get_start_iter(mbuf,&mstart);
+	gtk_text_buffer_get_end_iter(mbuf,&mend);
+	char* message = gtk_text_buffer_get_text(mbuf,&mstart,&mend,1);
+	size_t len = g_utf8_strlen(message,-1);
 	/* XXX we should probably do the actual network stuff in a different
 	 * thread and have it call this once the message is actually sent. */
-
-	// Code for having regular message identifier
-    size_t total_len = len + 1;
-    char *buffer = malloc(total_len);
-    
-    if (!buffer) {
-        fprintf(stderr, "Error: failed to allocate memory for the message buffer.\n");
-        free(message);
-        return;
-    }
-    buffer[0] = MSG_TYPE_TEXT;
-    memcpy(buffer + 1, message, len);
-
 	ssize_t nbytes;
-	if ((nbytes = send(sockfd, buffer, total_len, 0)) == -1)
+	if ((nbytes = send(sockfd,message,len,0)) == -1)
 		error("send failed");
 
-	tsappend(message, NULL, 1);
+	tsappend(message,NULL,1);
 	free(message);
-	free(buffer);
 	/* clear message text and reset focus */
-	gtk_text_buffer_delete(mbuf, &mstart, &mend);
+	gtk_text_buffer_delete(mbuf,&mstart,&mend);
 	gtk_widget_grab_focus(w);
 }
 
@@ -439,26 +424,22 @@ int main(int argc, char *argv[])
 void *recvMsg(void *)
 {
 	size_t maxlen = 512;
-	unsigned char type;
-	char msg[maxlen + 2]; /* might add \n and \0 */
+	char msg[maxlen+2]; /* might add \n and \0 */
 	ssize_t nbytes;
-	while (1)
-	{
-		if ((nbytes = recv(sockfd, msg, maxlen, 0)) == -1)
+	while (1) {
+		if ((nbytes = recv(sockfd,msg,maxlen,0)) == -1)
 			error("recv failed");
-		if (nbytes == 0)
-		{
+		if (nbytes == 0) {
 			/* XXX maybe show in a status message that the other
 			 * side has disconnected. */
 			return 0;
-		} else if (msg[0] == MSG_TYPE_TEXT) {
-			char *m = malloc(maxlen + 2);
-			memcpy(m, msg + 1, nbytes - 1);
-			if (m[nbytes - 1] != '\n')
-				m[nbytes++] = '\n';
-			m[nbytes] = 0;
-			g_main_context_invoke(NULL, shownewmessage, (gpointer)m);
 		}
+		char* m = malloc(maxlen+2);
+		memcpy(m,msg,nbytes);
+		if (m[nbytes-1] != '\n')
+			m[nbytes++] = '\n';
+		m[nbytes] = 0;
+		g_main_context_invoke(NULL,shownewmessage,(gpointer)m);
 	}
 	return 0;
 }
