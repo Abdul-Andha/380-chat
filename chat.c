@@ -9,6 +9,7 @@
 #include <getopt.h>
 #include "dh.h"
 #include "keys.h"
+#include "util.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 1024
@@ -61,24 +62,25 @@ void print_hex(const unsigned char *buffer, size_t length) {
 }
 
 // Need to be able to send message in format to be able to identify its a key
-void sendPublicKey(int sockfd, mpz_t pk) {
-    char* pk_str = mpz_get_str(NULL, 10, pk);
-    size_t pk_len = strlen(pk_str);
+// void sendPublicKey(int sockfd, mpz_t pk) {
+    // char* pk_str = mpz_get_str(NULL, 10, pk);
+    // size_t pk_len = strlen(pk_str);
 
-    char* message = malloc(1 + pk_len);
-    if (!message) {
-        perror("Failed to allocate memory");
-        free(pk_str);
-        return;
-    }
+    // char* message = malloc(1 + pk_len);
+    // if (!message) {
+    //     perror("Failed to allocate memory");
+    //     free(pk_str);
+    //     return;
+    // }
 
-    message[0] = MSG_TYPE_KEY;
-    memcpy(message + 1, pk_str, pk_len);
-    send(sockfd, message, 1 + pk_len, 0);
+    // message[0] = MSG_TYPE_KEY;
+    // memcpy(message + 1, pk_str, pk_len);
+    // send(sockfd, message, 1 + pk_len, 0);
 
-    free(message);
-    free(pk_str);
-}
+
+    // free(message);
+    // free(pk_str);
+// }
 
 
 int initServerNet(int port)
@@ -112,11 +114,24 @@ int initServerNet(int port)
 	initKey(&sessionKeys);
 	dhGenk(&sessionKeys);
 
-	sendPublicKey(sockfd, sessionKeys.PK);
+	if(serialize_mpz(sockfd, sessionKeys.PK) != 0)
+    {
+		error("Something went wrong sending public key (server)");
+	} else {
+		printf("sent public key (server)");
+	}
 
 	char* pk_str = mpz_get_str(NULL, 10, sessionKeys.PK);
     printf("Server public key (pk): %s\n", pk_str);
 	free(pk_str);
+
+	mpz_t clientPubKey;
+	if(deserialize_mpz(clientPubKey, sockfd) != 0)
+    {
+		error("Something went wrong recieving client public key");
+	} else {
+		printf("receieved client key");
+	}
 
 	return 0;
 }
@@ -146,11 +161,18 @@ static int initClientNet(char *hostname, int port)
 	initKey(&sessionKeys);
 	dhGenk(&sessionKeys);
 
-	sendPublicKey(sockfd, sessionKeys.PK);
+	if(serialize_mpz(sockfd, sessionKeys.PK) != 0)
+    {
+		error("Something went wrong sending public key (client)");
+	} else {
+		printf("sent public key (client)");
+	}
+
 
 	char* pk_str = mpz_get_str(NULL, 10, sessionKeys.PK);
     printf("Client public key (pk): %s\n", pk_str);
 	free(pk_str);
+	
 
 	return 0;
 }
@@ -407,47 +429,47 @@ void *recvMsg(void *)
 			 * side has disconnected. */
 			return 0;
 		}
-		if(msg[0] == MSG_TYPE_KEY){
-			printf("Received a public key \n");
-			// print the received key
-			char* pk_str = malloc(1024);
-			memcpy(pk_str, msg + 1, 1024);
-			pk_str[maxlen + 1] = '\0';
-			printf("Received public key: %s\n", pk_str);
+		// if(msg[0] == MSG_TYPE_KEY){
+		// 	printf("Received a public key \n");
+		// 	// print the received key
+		// 	char* pk_str = malloc(8192);
+		// 	memcpy(pk_str, msg + 1, 8192);
+		// 	pk_str[maxlen + 1] = '\0';
+		// 	printf("Received public key: %s\n", pk_str);
 
-			dhKey friendsLongTerm;
-			dhKey myLongTerm;
-			if (isclient)
-			{
-				if (readDH("serverKey.pub", &friendsLongTerm) == -1)
-				{
-					error("Failed to read server's public key");
-					return 0; // or handle the error in an appropriate way
-				}
-				if (readDH("clientKey", &myLongTerm) == -1)
-				{
-					error("Failed to read my long term public key");
-					return 0; // or handle the error in an appropriate way
-				}
-			}
-			else
-			{
-				if (readDH("clientKey.pub", &friendsLongTerm) == -1)
-				{
-					error("Failed to read client's public key");
-					return 0; // or handle the error in an appropriate way
-				}
-				if (readDH("serverKey", &myLongTerm) == -1)
-				{
-					error("Failed to read my long term public key");
-					return 0; // or handle the error in an appropriate way
-				}
-			}
+		// 	dhKey friendsLongTerm;
+		// 	dhKey myLongTerm;
+		// 	if (isclient)
+		// 	{
+		// 		if (readDH("serverKey.pub", &friendsLongTerm) == -1)
+		// 		{
+		// 			error("Failed to read server's public key");
+		// 			return 0; // or handle the error in an appropriate way
+		// 		}
+		// 		if (readDH("clientKey", &myLongTerm) == -1)
+		// 		{
+		// 			error("Failed to read my long term public key");
+		// 			return 0; // or handle the error in an appropriate way
+		// 		}
+		// 	}
+		// 	else
+		// 	{
+		// 		if (readDH("clientKey.pub", &friendsLongTerm) == -1)
+		// 		{
+		// 			error("Failed to read client's public key");
+		// 			return 0; // or handle the error in an appropriate way
+		// 		}
+		// 		if (readDH("serverKey", &myLongTerm) == -1)
+		// 		{
+		// 			error("Failed to read my long term public key");
+		// 			return 0; // or handle the error in an appropriate way
+		// 		}
+		// 	}
 			
-			dh3Final(myLongTerm.SK, myLongTerm.PK, sessionKeys.PK, sessionKeys.SK, friendsLongTerm.PK, pk_str, sharedSecret, 128);
-			printf("yo");
-			print_hex(sharedSecret, SHA256_DIGEST_LENGTH);
-		} else if (msg[0] == MSG_TYPE_TEXT) {
+			// dh3Final(myLongTerm.SK, myLongTerm.PK, sessionKeys.PK, sessionKeys.SK, friendsLongTerm.PK, pk_str, sharedSecret, 128);
+			// printf("yo");
+			// print_hex(sharedSecret, SHA256_DIGEST_LENGTH);
+		 else if (msg[0] == MSG_TYPE_TEXT) {
 			char *m = malloc(maxlen + 2);
 			memcpy(m, msg + 1, nbytes - 1);
 			if (m[nbytes - 1] != '\n')
