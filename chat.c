@@ -114,9 +114,6 @@ int initServerNet(int port)
     printf("Server public key (pk): %s\n", pk_str);
 	free(pk_str);
 
-    mpz_clear(serverKeys.PK);
-    mpz_clear(serverKeys.SK);
-
 	return 0;
 }
 
@@ -140,6 +137,18 @@ static int initClientNet(char *hostname, int port)
 	if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
 		error("ERROR connecting");
 	/* at this point, should be able to send/recv on sockfd */
+
+	/* Generate client's temp public and secret keys */
+	dhKey clientKeys;
+	initKey(&clientKeys);
+	dhGenk(&clientKeys);
+
+	sendPublicKey(sockfd, clientKeys.PK);
+
+	char* pk_str = mpz_get_str(NULL, 10, clientKeys.PK);
+    printf("Client public key (pk): %s\n", pk_str);
+	free(pk_str);
+
 	return 0;
 }
 
