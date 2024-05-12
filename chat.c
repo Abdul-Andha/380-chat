@@ -19,6 +19,10 @@
 #define HOST_NAME_MAX 255
 #endif
 
+// Define message types
+#define MSG_TYPE_KEY 0x01
+#define MSG_TYPE_TEXT 0x02
+
 static GtkTextBuffer *tbuf; /* transcript buffer */
 static GtkTextBuffer *mbuf; /* message buffer */
 static GtkTextView *tview;	/* view for transcript */
@@ -42,6 +46,36 @@ static void error(const char *msg)
 	perror(msg);
 	exit(EXIT_FAILURE);
 }
+
+// For debugging purposes, to be able to read keybuff from dhFinal
+void print_hex(const unsigned char *buffer, size_t length) {
+    printf("Key Buffer (Hex): ");
+    for (size_t i = 0; i < length; ++i) {
+        printf("%02x", buffer[i]);
+    }
+    printf("\n");
+}
+
+// Need to be able to send message in format to be able to identify its a key
+void sendPublicKey(int sockfd, mpz_t pk) {
+    char* pk_str = mpz_get_str(NULL, 10, pk);
+    size_t pk_len = strlen(pk_str);
+
+    char* message = malloc(1 + pk_len);
+    if (!message) {
+        perror("Failed to allocate memory");
+        free(pk_str);
+        return;
+    }
+
+    message[0] = MSG_TYPE_KEY;
+    memcpy(message + 1, pk_str, pk_len);
+    send(sockfd, message, 1 + pk_len, 0);
+
+    free(message);
+    free(pk_str);
+}
+
 
 int initServerNet(int port)
 {
@@ -68,6 +102,21 @@ int initServerNet(int port)
 	close(listensock);
 	fprintf(stderr, "connection made, starting session...\n");
 	/* at this point, should be able to send/recv on sockfd */
+	
+	/* Generate server's temp public and secret keys */
+	dhKey serverKeys;
+	initKey(&serverKeys);
+	dhGenk(&serverKeys);
+
+	sendPublicKey(sockfd, serverKeys.PK);
+
+	char* pk_str = mpz_get_str(NULL, 10, serverKeys.PK);
+    printf("Server public key (pk): %s\n", pk_str);
+	free(pk_str);
+
+    mpz_clear(serverKeys.PK);
+    mpz_clear(serverKeys.SK);
+
 	return 0;
 }
 
@@ -183,12 +232,26 @@ static void sendMessage(GtkWidget *w /* <-- msg entry widget */, gpointer /* dat
 	size_t len = g_utf8_strlen(message, -1);
 	/* XXX we should probably do the actual network stuff in a different
 	 * thread and have it call this once the message is actually sent. */
+
+	// Code for having regular message identifier
+    size_t total_len = len + 1;
+    char *buffer = malloc(total_len);
+    
+    if (!buffer) {
+        fprintf(stderr, "Error: failed to allocate memory for the message buffer.\n");
+        free(message);
+        return;
+    }
+    buffer[0] = MSG_TYPE_TEXT;
+    memcpy(buffer + 1, message, len);
+
 	ssize_t nbytes;
-	if ((nbytes = send(sockfd, message, len, 0)) == -1)
+	if ((nbytes = send(sockfd, buffer, total_len, 0)) == -1)
 		error("send failed");
 
 	tsappend(message, NULL, 1);
 	free(message);
+	free(buffer);
 	/* clear message text and reset focus */
 	gtk_text_buffer_delete(mbuf, &mstart, &mend);
 	gtk_widget_grab_focus(w);
@@ -319,6 +382,7 @@ int main(int argc, char *argv[])
 void *recvMsg(void *)
 {
 	size_t maxlen = 512;
+	unsigned char type;
 	char msg[maxlen + 2]; /* might add \n and \0 */
 	ssize_t nbytes;
 	while (1)
@@ -331,12 +395,16 @@ void *recvMsg(void *)
 			 * side has disconnected. */
 			return 0;
 		}
-		char *m = malloc(maxlen + 2);
-		memcpy(m, msg, nbytes);
-		if (m[nbytes - 1] != '\n')
-			m[nbytes++] = '\n';
-		m[nbytes] = 0;
-		g_main_context_invoke(NULL, shownewmessage, (gpointer)m);
+		if(msg[0] == MSG_TYPE_KEY){
+			printf("Received a public key \n");
+		} else if (msg[0] == MSG_TYPE_TEXT) {
+			char *m = malloc(maxlen + 2);
+			memcpy(m, msg + 1, nbytes - 1);
+			if (m[nbytes - 1] != '\n')
+				m[nbytes++] = '\n';
+			m[nbytes] = 0;
+			g_main_context_invoke(NULL, shownewmessage, (gpointer)m);
+		}
 	}
 	return 0;
 }
