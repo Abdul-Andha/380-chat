@@ -127,7 +127,7 @@ int initServerNet(int port)
 	}
 
 	dh3Final(myLongTerm.SK, myLongTerm.PK, sessionKeys.SK, sessionKeys.PK, friendsLongTerm.PK, clientPubKey, sharedSecret, 128);
-	printf("yo");
+	printf("Shared Secret: ");
 	print_hex(sharedSecret, SHA256_DIGEST_LENGTH);
 
 	return 0;
@@ -194,7 +194,7 @@ static int initClientNet(char *hostname, int port)
 	}
 
 	dh3Final(myLongTerm.SK, myLongTerm.PK, sessionKeys.SK, sessionKeys.PK, friendsLongTerm.PK, serverPubKey, sharedSecret, 128);
-	printf("yo");
+	printf("Shared Secret: ");
 	print_hex(sharedSecret, SHA256_DIGEST_LENGTH);
 
 	return 0;
@@ -286,10 +286,28 @@ static void sendMessage(GtkWidget *w /* <-- msg entry widget */, gpointer /* dat
 	gtk_text_buffer_get_end_iter(mbuf,&mend);
 	char* message = gtk_text_buffer_get_text(mbuf,&mstart,&mend,1);
 	size_t len = g_utf8_strlen(message,-1);
+
+	/* Encrypt message */
+	unsigned char ct[512];
+	memset(ct,0,512);
+	EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+	if (1!=EVP_EncryptInit_ex(ctx,EVP_aes_256_ctr(),0,sharedSecret,sharedSecret+32))
+		error("encryption failed");
+	int nWritten; /* stores number of written bytes (size of ciphertext) */
+	if (1!=EVP_EncryptUpdate(ctx,ct,&nWritten,(unsigned char*)message,len))
+		error("encryption failed");
+	EVP_CIPHER_CTX_free(ctx);
+	size_t ctlen = nWritten;
+	printf("ciphertext of length %i:\n",nWritten);
+	for (size_t i = 0; i < ctlen; i++) {
+		printf("%02x",ct[i]);
+	}
+	printf("\n");
+
 	/* XXX we should probably do the actual network stuff in a different
 	 * thread and have it call this once the message is actually sent. */
 	ssize_t nbytes;
-	if ((nbytes = send(sockfd,message,len,0)) == -1)
+	if ((nbytes = send(sockfd,ct,nWritten,0)) == -1)
 		error("send failed");
 
 	tsappend(message,NULL,1);
@@ -434,12 +452,28 @@ void *recvMsg(void *)
 			 * side has disconnected. */
 			return 0;
 		}
-		char* m = malloc(maxlen+2);
+		char* m = malloc(maxlen+1);
 		memcpy(m,msg,nbytes);
-		if (m[nbytes-1] != '\n')
+		if (m[nbytes-2] != '\n')
 			m[nbytes++] = '\n';
 		m[nbytes] = 0;
-		g_main_context_invoke(NULL,shownewmessage,(gpointer)m);
+
+		/* Decrpyting message */
+		unsigned char pt[512];
+		memset(pt,0,512);
+		EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+		if (1!=EVP_DecryptInit_ex(ctx,EVP_aes_256_ctr(),0,sharedSecret,sharedSecret+32))
+			error("decryption failed");
+		int nWritten; /* stores number of written bytes (size of ciphertext) */
+		if (1!=EVP_DecryptUpdate(ctx,pt,&nWritten,(unsigned char*)m,nbytes))
+			error("decryption failed");
+		size_t ptlen = nWritten;
+		printf("decrypted %lu bytes:\n%s\n",ptlen,pt);
+
+		char* message = (char *)malloc(ptlen);
+		memcpy(message,pt,ptlen);
+			
+		g_main_context_invoke(NULL,shownewmessage,(gpointer)message);
 	}
 	return 0;
 }
